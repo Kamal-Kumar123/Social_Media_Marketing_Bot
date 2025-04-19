@@ -1,0 +1,57 @@
+import streamlit as st
+
+tab1, tab2, tab3, tab4 = st.tabs(["Home" , "basic", "media", "new"])
+  
+with tab1:
+    st.header("Home")
+
+
+
+
+
+
+with tab2:
+    st.header("Basic")
+    st.write("my first app  hello world")
+    table = ({"columnn 1" : [1,2, 3, 4, 5],
+          "columne 2" : [6, 7, 8 , 9, 10]})
+    
+    st.dataframe(table) 
+    st.write("hello  kamal lon")
+    st.title("this is title")  
+
+
+with tab3:
+    st.header("Media")
+    car_types = ['mercedes','ferrari',"toyoto"]
+    st.image("data:image/jpeg;base64,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"
+            ,caption='This is a image')
+    st.video("https://www.youtube.com/watch?v=owUSRrLkCdA&list=PLMi6KgK4_mk2rK5jD-BK5RigFIP2QSq8W&index=4"
+            )
+    st.markdown(" This is so funny :joy:")
+
+    car = st.text_input("Type an car ")
+
+    button = st.button("cehck availability")
+
+    if button== True :
+        have_it = car.lower() in car_types
+        if have_it :
+            st.write("we have it ")
+        else :
+            st.write("we are sorry") 
+            
+    with st.container(border=True):
+        col1 , col2 , col3 = st.columns(3)
+
+        with col1:
+            st.header('Java')
+            with st.expander("See more"):
+                st.write("This course is taught by Jasra")
+
+        with col2 :
+            st.header('python')
+        with col3:
+            st.header('Java') 
+        with tab4:
+            st.header("New")                
