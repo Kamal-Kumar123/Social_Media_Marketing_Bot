@@ -1,4 +1,4 @@
-#!"/home/kamal/Desktop/LastAppStanding/Social Media Marketing App/addbot/AdBot/bin/python3.11"
+#!/home/kamal/Desktop/LastAppStanding/addbot/AdBot/bin/python3.11
 # EASY-INSTALL-ENTRY-SCRIPT: 'tiktok-api==0.10.5','console_scripts','tiktok-api'
 import re
 import sys

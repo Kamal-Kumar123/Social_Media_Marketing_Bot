@@ -36,14 +36,20 @@ def initialize_firebase():
     return True
 
 class AuthManager:
-    """Class for handling user authentication and session management"""
+    """Manages authentication for the application"""
     
     def __init__(self):
-        """Initialize the authentication manager"""
-        # Google OAuth configuration
+        """Initialize authentication manager"""
+        # Load environment variables with fallbacks
         self.client_id = os.getenv("GOOGLE_CLIENT_ID")
         self.client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
         self.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501/callback")
+
+        
+        # Log authentication configuration (without sensitive details)
+        logger.info(f"AuthManager initialized with redirect URI: {self.redirect_uri}")
+        if not self.client_id or not self.client_secret:
+            logger.warning("Google OAuth credentials are not configured properly")
         
         # Initialize Firebase
         self.firebase_initialized = initialize_firebase()
@@ -148,36 +154,54 @@ class AuthManager:
     
     def _initiate_google_auth(self):
         """Initiate Google OAuth flow"""
-        # Set up Google OAuth parameters
-        auth_url = "https://accounts.google.com/o/oauth2/auth"
-        auth_params = {
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
-            "response_type": "code",
-            "scope": "email profile",
-            "prompt": "select_account"
-        }
+        if not self.client_id or not self.client_secret:
+            st.error("Google OAuth credentials not configured.")
+            logger.error("Attempted Google authentication with missing credentials")
+            return
         
-        # Construct the authorization URL
-        auth_url = f"{auth_url}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
-        
-        # Redirect to Google sign-in
-        js = f"""
+        try:
+            # Generate authentication URL with clearer parameters
+            auth_url = (
+                "https://accounts.google.com/o/oauth2/auth?"
+                f"client_id={self.client_id}&"
+                f"redirect_uri={self.redirect_uri}&"
+                "response_type=code&"
+                "scope=email+profile&"
+                "access_type=offline&"
+                "prompt=select_account"
+            )
+            
+            logger.info(f"Initiating Google OAuth flow with redirect to: {self.redirect_uri}")
+            
+            # Use JavaScript to redirect instead of streamlit's method
+            # This avoids client-side redirect issues
+            js_code = f"""
         <script>
+            // Save the current page to session storage before redirecting
+            sessionStorage.setItem('streamlit_oauth_redirect', 'true');
+            // Redirect to Google Auth
         window.location.href = "{auth_url}";
         </script>
         """
-        html(js, height=0)
-        
-        # Clear existing query parameters
-        st.query_params.clear()
+            
+            # Use Streamlit's HTML component to execute the JavaScript
+            html(js_code, height=0)
+        except Exception as e:
+            logger.error(f"Error during Google authentication initiation: {str(e)}")
+            st.error(f"Authentication error: {str(e)}")
     
     def _process_oauth_callback(self, code):
-        """Process the OAuth callback"""
+        """Process OAuth callback with authorization code"""
+        if not code:
+            logger.warning("OAuth callback received without authorization code")
+            return False
+        
         try:
-            # Exchange code for tokens
+            logger.info("Processing OAuth callback")
+            
+            # Exchange authorization code for tokens
             token_url = "https://oauth2.googleapis.com/token"
-            token_params = {
+            token_data = {
                 "code": code,
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
@@ -185,52 +209,109 @@ class AuthManager:
                 "grant_type": "authorization_code"
             }
             
-            response = requests.post(token_url, data=token_params)
-            tokens = response.json()
+            token_response = requests.post(token_url, data=token_data)
+            token_response.raise_for_status()
+            token_info = token_response.json()
             
-            if "error" in tokens:
-                st.error(f"Authentication error: {tokens['error']}")
-                # Remove the query parameters to avoid repeated attempts
-                st.query_params.clear()
-                return
+            # Get user information using the access token
+            user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+            headers = {"Authorization": f"Bearer {token_info['access_token']}"}
+            user_response = requests.get(user_info_url, headers=headers)
+            user_response.raise_for_status()
+            user_info = user_response.json()
             
-            # Get user info from ID token
-            id_info = id_token.verify_oauth2_token(
-                tokens["id_token"],
-                google.auth.transport.requests.Request(),
-                self.client_id
-            )
+            # Create user object
+            user = {
+                "id": user_info["id"],
+                "email": user_info["email"],
+                "name": user_info.get("name", user_info["email"].split("@")[0]),
+                "picture": user_info.get("picture", f"https://ui-avatars.com/api/?name={user_info.get('name', 'User')}&background=random")
+            }
             
-            if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-                raise ValueError('Invalid issuer')
+            # Store user in session
+            st.session_state["user"] = user
             
-            # Process user information
-            user_data = {
-                "id": id_info.get("sub"),
-                "email": id_info.get("email"),
-                "name": id_info.get("name"),
-                "picture": id_info.get("picture"),
+            # Store user in Firestore if Firebase is initialized
+            if self.firebase_initialized:
+                self._store_user(user)
+            
+            # Create default company for the user if needed
+            # You would typically check your database here
+            # For demo purposes, we'll create a simple company
+            test_company = {
+                "id": f"{user['id']}-company",
+                "name": f"{user['name']}'s Company",
+                "owner": user['id'],
+                "role": "owner",
+                "plan": "free",
+                "balance": 100.0,
+                "members": [
+                    {"id": user['id'], "email": user['email'], "role": "owner"}
+                ]
+            }
+            
+            # Store company in session
+            st.session_state["company"] = test_company
+            
+            logger.info(f"Successfully authenticated user: {user['email']}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"OAuth error: {str(e)}")
+            st.error(f"Authentication error: {str(e)}")
+            return False
+    
+    def _create_test_user(self):
+        """Create a test user for development purposes"""
+        try:
+            # Create a simple test user
+            test_user = {
+                "id": "test-user-id",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": "https://ui-avatars.com/api/?name=Test+User&background=random",
                 "last_login": datetime.datetime.now().isoformat()
             }
             
-            # Add or update user in database
-            self._store_user(user_data)
+            # Store user in session
+            st.session_state["user"] = test_user
             
-            # Set user in session state
-            st.session_state["user"] = user_data
+            # Store user in Firestore if Firebase is initialized
+            if self.firebase_initialized:
+                self._store_user(test_user)
             
-            # Get or create company for user
-            company = self._get_user_company(user_data["id"])
-            st.session_state["company"] = company
+            # Create a test company for the user
+            test_company = {
+                "id": "test-company-id",
+                "name": "Test Company",
+                "description": "Company for development testing",
+                "created_at": datetime.datetime.now().isoformat(),
+                "created_by": "test-user-id",
+                "plan": "free"  # Default free plan
+            }
             
-            # Redirect to remove query parameters
-            st.query_params.clear()
-            st.rerun()
+            # Store company in session
+            st.session_state["company"] = test_company
             
+            # Store company in Firestore if Firebase is initialized
+            if self.firebase_initialized:
+                db = firestore.client()
+                # Check if test company exists
+                company_ref = db.collection("companies").document("test-company-id")
+                if not company_ref.get().exists:
+                    company_ref.set(test_company)
+                    # Add user as admin of the company
+                    db.collection("company_members").add({
+                        "user_id": "test-user-id",
+                        "company_id": "test-company-id",
+                        "role": "admin",
+                        "added_at": datetime.datetime.now().isoformat()
+                    })
+            
+            return True
         except Exception as e:
-            logger.error(f"Error processing OAuth callback: {str(e)}")
-            st.error(f"Authentication failed: {str(e)}")
-            st.query_params.clear()
+            logger.error(f"Error creating test user: {str(e)}")
+            return False
     
     def _store_user(self, user_data):
         """Store user data in Firestore"""
@@ -302,22 +383,27 @@ class AuthManager:
             return None
     
     def get_current_user(self):
-        """Get the current user from the session"""
-        return st.session_state.get("user")
+        """Get current user"""
+        if self.is_authenticated():
+            return st.session_state["user"]
+        return None
     
     def get_current_company(self):
-        """Get the current company from the session"""
-        return st.session_state.get("company")
+        """Get current company"""
+        if "company" in st.session_state:
+            return st.session_state["company"]
+        return None
     
     def logout(self):
-        """Log the user out and clear session"""
-        st.session_state["user"] = None
-        st.session_state["company"] = None
-        st.rerun()
+        """Log user out"""
+        if "user" in st.session_state:
+            del st.session_state["user"]
+        if "company" in st.session_state:
+            del st.session_state["company"]
     
     def is_authenticated(self):
         """Check if user is authenticated"""
-        return "user" in st.session_state and st.session_state.get("user") is not None
+        return "user" in st.session_state and st.session_state["user"] is not None
     
     def get_user_companies(self, user_id):
         """Get all companies a user is a member of"""

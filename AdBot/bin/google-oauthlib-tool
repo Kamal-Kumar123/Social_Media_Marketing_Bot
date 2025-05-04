@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "/home/kamal/Desktop/LastAppStanding/Social Media Marketing App/addbot/AdBot/bin/python3.11" "$0" "$@"
-' '''
+#!/home/kamal/Desktop/LastAppStanding/addbot/AdBot/bin/python3.11
 # -*- coding: utf-8 -*-
 import re
 import sys

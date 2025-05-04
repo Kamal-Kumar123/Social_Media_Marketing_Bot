@@ -4,12 +4,13 @@ Analytics pages for the AdBot application.
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import datetime
+import altair as alt
 
 def analytics_page(data_access, auth_manager, payment_manager):
     """Display analytics and reporting page"""
     try:
+        # Simple title like the schedule page
         st.title("Analytics")
         
         # Get user and company
@@ -19,11 +20,6 @@ def analytics_page(data_access, auth_manager, payment_manager):
         if not user or not company:
             st.warning("Please log in to view analytics")
             return
-        
-        # Display debugging info in a cleaner way
-        with st.sidebar.expander("🔍 Debug Information", expanded=False):
-            st.markdown("#### User & Company")
-            st.json({"user": user, "company": company})
         
         # Check if analytics is allowed on current plan
         plan = company.get("plan", "free")
@@ -38,13 +34,7 @@ def analytics_page(data_access, auth_manager, payment_manager):
             # Analytics included in plan
             has_analytics = True
         
-        # Display analytics options in a cleaner card
-        st.markdown("""
-        <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:15px">
-            <h3 style="margin-top:0">Analytics Configuration</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        # Simple time range selection
         time_periods = ["Last 7 days", "Last 30 days", "Last 90 days"]
         selected_period = st.selectbox("Time Period", time_periods)
         
@@ -59,8 +49,6 @@ def analytics_page(data_access, auth_manager, payment_manager):
         # Get analytics data
         try:
             analytics_data = data_access.get_company_analytics(company["id"], days)
-            with st.sidebar.expander("Analytics Data", expanded=False):
-                st.json(analytics_data)
         except Exception as e:
             st.error(f"Error loading analytics data: {str(e)}")
             analytics_data = {
@@ -96,8 +84,8 @@ def analytics_page(data_access, auth_manager, payment_manager):
             
         # Display analytics
         if not has_analytics:
-            # Option to pay for analytics report
-            st.warning("Analytics reports are not included in your current plan.")
+            # Use the same warning style as in the schedule page
+            st.warning("Analytics reports are not included in your current plan. Please upgrade to unlock this feature.")
             
             # Check if user has sufficient balance
             if payment_manager._check_sufficient_balance(company["id"], "analytics", 1):
@@ -119,15 +107,12 @@ def analytics_page(data_access, auth_manager, payment_manager):
                 if st.button("Go to Billing Page"):
                     st.session_state["current_page"] = "Billing"
                     st.rerun()
+            return
         
         # Only show analytics if the plan allows it
         if has_analytics:
-            # Display analytics here...
-            st.markdown("""
-            <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:15px">
-                <h3 style="margin-top:0">Analytics Summary</h3>
-            </div>
-            """, unsafe_allow_html=True)
+            # Simple summary section
+            st.subheader("Performance Summary")
             
             # Create metrics
             col1, col2, col3, col4 = st.columns(4)
@@ -155,17 +140,16 @@ def analytics_page(data_access, auth_manager, payment_manager):
                     label="Total Comments", 
                     value=analytics_data["summary"].get("total_comments", 0)
                 )
+            
+            # Add a separator
+            st.markdown("---")
                 
             # Get products for the filter
             try:
                 products = data_access.get_company_products(company["id"])
                 
-                # Display platform breakdown
-                st.markdown("""
-                <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:15px">
-                    <h3 style="margin-top:0">Platform Performance</h3>
-                </div>
-                """, unsafe_allow_html=True)
+                # Platform breakdown section
+                st.subheader("Platform Performance")
                 
                 # If no platforms data, show a message
                 if not analytics_data.get("platforms"):
@@ -184,28 +168,63 @@ def analytics_page(data_access, auth_manager, payment_manager):
                     
                     if platform_data:
                         platform_df = pd.DataFrame(platform_data)
-                        st.dataframe(platform_df, use_container_width=True)
+                        
+                        # Create a visualization with Altair (simpler styling)
+                        if len(platform_data) > 0:
+                            df_long = pd.melt(
+                                platform_df, 
+                                id_vars=['Platform'], 
+                                value_vars=['Likes', 'Shares', 'Comments'],
+                                var_name='Metric', 
+                                value_name='Count'
+                            )
+                            
+                            chart = alt.Chart(df_long).mark_bar().encode(
+                                x=alt.X('Platform:N', title=None),
+                                y=alt.Y('Count:Q', title='Engagement Count'),
+                                color=alt.Color('Metric:N'),
+                                tooltip=['Platform', 'Metric', 'Count']
+                            ).properties(
+                                height=300
+                            )
+                            
+                            st.altair_chart(chart, use_container_width=True)
+                        
+                        # Show the raw data in a table
+                        st.dataframe(platform_df, use_container_width=True, hide_index=True)
                     else:
                         st.info("No platform data available yet.")
                 
-                # Display recent posts
-                st.markdown("""
-                <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:15px">
-                    <h3 style="margin-top:0">Recent Posts</h3>
-                </div>
-                """, unsafe_allow_html=True)
+                # Add a separator
+                st.markdown("---")
+                
+                # Recent posts section
+                st.subheader("Recent Posts")
                 
                 # If no recent posts, show a message
                 if not analytics_data.get("recent_posts"):
                     st.info("No recent posts available.")
                 else:
-                    # Display recent posts
+                    # Display recent posts with simpler styling
                     for post in analytics_data.get("recent_posts", []):
-                        with st.expander(f"{post.get('platform', '').capitalize()} - {post.get('timestamp', '')}"):
-                            st.markdown(f"**Content:** {post.get('content', 'No content')}")
-                            st.markdown(f"**Likes:** {post.get('likes', 0)} | **Shares:** {post.get('shares', 0)} | **Comments:** {post.get('comments', 0)}")
-                            if post.get('url'):
-                                st.markdown(f"[View Post]({post.get('url')})")
+                        platform = post.get('platform', '').capitalize()
+                        date = post.get('timestamp', '')
+                        
+                        st.markdown(f"""
+                        <div style="border: 1px solid #eee; padding: 15px; margin-bottom: 10px; border-radius: 5px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span style="font-weight: bold;">{platform}</span>
+                                <span style="font-size: 12px; color: #777;">{date}</span>
+                            </div>
+                            <p style="margin-bottom: 10px;">{post.get('content', 'No content')}</p>
+                            <div>
+                                <span style="margin-right: 15px;">❤️ {post.get('likes', 0)} Likes</span>
+                                <span style="margin-right: 15px;">🔄 {post.get('shares', 0)} Shares</span>
+                                <span style="margin-right: 15px;">💬 {post.get('comments', 0)} Comments</span>
+                            </div>
+                            {f'<a href="{post.get("url")}" target="_blank" style="display: inline-block; margin-top: 10px;">View Post →</a>' if post.get('url') else ''}
+                        </div>
+                        """, unsafe_allow_html=True)
                 
             except Exception as e:
                 st.error(f"Error displaying analytics: {str(e)}")
@@ -213,9 +232,9 @@ def analytics_page(data_access, auth_manager, payment_manager):
     except Exception as e:
         st.error(f"Error in analytics_page: {str(e)}")
         
-        # Show a more user-friendly error message with debugging help
+        # Show a more user-friendly error message
         st.markdown("""
-        <div style="background-color:#f8d7da; padding:15px; border-radius:10px; margin-bottom:15px">
+        <div style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin: 10px 0;">
             <h3 style="margin-top:0; color:#721c24">We encountered an error</h3>
             <p>Our analytics service is currently experiencing some issues. Please try again later.</p>
         </div>

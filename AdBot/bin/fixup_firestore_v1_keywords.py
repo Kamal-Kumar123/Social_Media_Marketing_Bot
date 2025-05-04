@@ -1,4 +1,4 @@
-#!/home/kamal/Desktop/LastAppStanding/Social Media Marketing App/addbot/AdBot/bin/python3.11
+#!/home/kamal/Desktop/LastAppStanding/addbot/AdBot/bin/python3.11
 # -*- coding: utf-8 -*-
 # Copyright 2025 Google LLC
 #

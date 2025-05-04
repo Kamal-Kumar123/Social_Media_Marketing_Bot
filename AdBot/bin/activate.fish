@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/home/kamal/Desktop/LastAppStanding/Social Media Marketing App/addbot/AdBot"
+set -gx VIRTUAL_ENV "/home/kamal/Desktop/LastAppStanding/addbot/AdBot"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

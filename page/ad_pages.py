@@ -6,6 +6,7 @@ import streamlit as st
 import time
 import datetime
 import pandas as pd
+import traceback
 
 def create_ad_page(data_access, auth_manager, content_generator, social_handler, payment_manager):
     """Page for creating social media ads"""
@@ -152,6 +153,22 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                 options=["professional", "conversational", "humorous", "serious", "dramatic"]
             )
             
+            # Add text input for ad copy
+            st.markdown("### Ad Copy")
+            ad_copy = st.text_area(
+                "Enter your ad text",
+                placeholder="Enter the text content for your advertisement here...",
+                height=150
+            )
+            
+            # Add image upload functionality
+            st.markdown("### Ad Image")
+            uploaded_image = st.file_uploader("Upload an image for your ad", type=["jpg", "jpeg", "png"])
+            
+            # Display uploaded image preview
+            if uploaded_image is not None:
+                st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
+            
             # Ad length
             length = st.select_slider(
                 "Ad Length",
@@ -175,6 +192,21 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                     # Get product data
                     product = products[product_id]
                     
+                    # Get the selected platform from checkboxes
+                    selected_platform_list = [p for p, is_selected in Selected_Platforms.items() if is_selected]
+                    
+                    if not selected_platform_list:
+                        st.error("Please select at least one platform to generate ad content")
+                        return
+                    
+                    # Use the first selected platform
+                    platform = selected_platform_list[0]
+                    
+                    # Check if user provided ad copy
+                    if not ad_copy:
+                        st.error("Please enter ad copy text for your advertisement")
+                        return
+                    
                     # Record usage for image generation (check balance)
                     usage_result = payment_manager.record_usage(company["id"], "image_generation")
                     
@@ -183,8 +215,33 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                         st.info("Please add credits to your account to continue using the service.")
                         return
                     
-                    # Generate ad content
-                    ad_content = content_generator.create_ad_content(product, platform, format_type)
+                    # Create ad content from user inputs instead of generating
+                    ad_content = {
+                        "platform": platform,
+                        "copy": ad_copy,
+                        "product_id": product_id,
+                        "format_type": format_type
+                    }
+                    
+                    # Handle image upload
+                    if uploaded_image is not None:
+                        # Save the uploaded image to a file
+                        import os
+                        from PIL import Image
+                        import io
+                        
+                        # Create directory if it doesn't exist
+                        os.makedirs("data/images", exist_ok=True)
+                        
+                        # Generate a unique filename
+                        image_filename = f"data/images/{company['id']}_{product_id}_{int(time.time())}.jpg"
+                        
+                        # Save the image
+                        img = Image.open(uploaded_image)
+                        img.save(image_filename)
+                        
+                        # Add image path to ad_content
+                        ad_content["image_path"] = image_filename
                     
                     # Store in session state for posting
                     st.session_state["current_ad_content"] = ad_content
@@ -200,9 +257,22 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                     if "image_path" in ad_content:
                         st.markdown("#### Ad Image")
                         st.image(ad_content["image_path"])
+                    elif uploaded_image is not None:
+                        st.markdown("#### Ad Image")
+                        st.image(uploaded_image)
                     
                     # Post button
                     if st.button("Post This Ad"):
+                        # Get the selected platform from checkboxes
+                        selected_platform_list = [p for p, is_selected in Selected_Platforms.items() if is_selected]
+                        
+                        if not selected_platform_list:
+                            st.error("Please select at least one platform to post to")
+                            return
+                        
+                        # Use the first selected platform (or we could loop through all selected)
+                        platform = selected_platform_list[0]
+                        
                         with st.spinner("Posting to " + platform + "..."):
                             # Record usage for post
                             usage_result = payment_manager.record_usage(company["id"], "post")
@@ -249,11 +319,28 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                                 st.error(f"Failed to post: {post_result.get('error', 'Unknown error')}")
                 
                 except Exception as e:
+                    error_details = traceback.format_exc()
                     st.error(f"Error generating ad preview: {str(e)}")
+                    st.expander("Error details").code(error_details)
         
         # Handle post now
         if post_now:
             try:
+                # Get the selected platform from checkboxes
+                selected_platform_list = [p for p, is_selected in Selected_Platforms.items() if is_selected]
+                
+                if not selected_platform_list:
+                    st.error("Please select at least one platform to post to")
+                    return
+                
+                # Check if user provided ad copy
+                if not ad_copy:
+                    st.error("Please enter ad copy text for your advertisement")
+                    return
+                
+                # Use the first selected platform
+                platform = selected_platform_list[0]
+                
                 with st.spinner(f"Creating and posting ad to {platform}..."):
                     # Get product data
                     product = products[product_id]
@@ -268,8 +355,33 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                         st.info("Please add credits to your account to continue using the service.")
                         return
                     
-                    # Generate ad content
-                    ad_content = content_generator.create_ad_content(product, platform, format_type)
+                    # Create ad content from user inputs instead of generating
+                    ad_content = {
+                        "platform": platform,
+                        "copy": ad_copy,
+                        "product_id": product_id,
+                        "format_type": format_type
+                    }
+                    
+                    # Handle image upload
+                    if uploaded_image is not None:
+                        # Save the uploaded image to a file
+                        import os
+                        from PIL import Image
+                        import io
+                        
+                        # Create directory if it doesn't exist
+                        os.makedirs("data/images", exist_ok=True)
+                        
+                        # Generate a unique filename
+                        image_filename = f"data/images/{company['id']}_{product_id}_{int(time.time())}.jpg"
+                        
+                        # Save the image
+                        img = Image.open(uploaded_image)
+                        img.save(image_filename)
+                        
+                        # Add image path to ad_content
+                        ad_content["image_path"] = image_filename
                     
                     # Add company_id to ad_content
                     ad_content["company_id"] = company["id"]
@@ -308,13 +420,16 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                         st.error(f"Failed to post: {post_result.get('error', 'Unknown error')}")
                 
             except Exception as e:
+                error_details = traceback.format_exc()
                 st.error(f"Error posting ad: {str(e)}")
+                st.expander("Error details").code(error_details)
 
     except Exception as e:
+        error_details = traceback.format_exc()
         st.error(f"Error in create_ad_page: {str(e)}")
         st.markdown("### Debug Information")
         st.markdown("If this error persists, please contact support with the following details:")
-        st.code(str(e), language="python")
+        st.expander("Error details").code(error_details)
 
 def schedule_page(data_access, auth_manager, scheduler, payment_manager):
     """Post scheduling page"""

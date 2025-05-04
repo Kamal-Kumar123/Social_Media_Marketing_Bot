@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="/home/kamal/Desktop/LastAppStanding/Social Media Marketing App/addbot/AdBot"
+VIRTUAL_ENV="/home/kamal/Desktop/LastAppStanding/addbot/AdBot"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
