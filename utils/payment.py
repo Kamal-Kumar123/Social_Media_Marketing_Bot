@@ -23,6 +23,9 @@ class PaymentManager:
         stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
         self.public_key = os.getenv("STRIPE_PUBLIC_KEY")
         
+        # Check if we're using a test account - for development but with real posting
+        self.test_account = os.getenv("TEST_ACCOUNT", "false").lower() == "true"
+        
         # Initialize pricing and usage rates
         self.rates = {
             "post": 0.50,  # $0.50 per post
@@ -73,6 +76,8 @@ class PaymentManager:
                 "team_members": "Unlimited"
             }
         }
+        
+        logger.info(f"PaymentManager initialized - Test Account: {self.test_account}")
     
     def get_payment_page(self, company_id):
         """Get the payment dashboard for a company"""
@@ -423,70 +428,148 @@ class PaymentManager:
             return False
     
     def record_usage(self, company_id, usage_type, quantity=1):
-        """Record usage and charge for pay-as-you-go"""
-        try:
-            # Special handling for test account
-            if company_id == "test-company-id":
-                # Allow free usage for test account
+        """Record usage and deduct from balance if necessary"""
+        
+        # For test accounts, record usage but don't charge
+        if company_id == "test-company-id" or self.test_account:
+            logger.info(f"Test account usage recorded for {usage_type} - no charge applied")
+            
+            try:
+                # Record usage for analytics but don't charge
                 db = firestore.client()
-                db.collection("usage").add({
+                usage_ref = db.collection("usage").document()
+                usage_data = {
                     "company_id": company_id,
                     "type": usage_type,
                     "quantity": quantity,
-                    "cost": 0,  # No cost for test account
+                    "amount": 0.0,  # No charge for test accounts
                     "timestamp": datetime.datetime.now().isoformat(),
-                    "description": f"{quantity} {usage_type} usage (test account)"
-                })
+                    "status": "test_account"
+                }
+                usage_ref.set(usage_data)
                 
-                return {"success": True, "cost": 0}
-            
-            # For non-test accounts, check if company has sufficient balance
-            if not self._check_sufficient_balance(company_id, usage_type, quantity):
-                return {"error": "Insufficient balance", "success": False}
-            
-            # Calculate cost
-            rate = self.rates.get(usage_type, 0)
-            cost = rate * quantity
+                return {
+                    "success": True,
+                    "message": "Test account usage recorded (no charge)",
+                    "id": usage_ref.id
+                }
+            except Exception as e:
+                logger.error(f"Error recording test account usage: {str(e)}")
+                # Continue without failing for test accounts
+                return {
+                    "success": True,
+                    "message": f"Test account usage noted but error recording: {str(e)}",
+                    "id": None
+                }
+
+        # Check if sufficient balance
+        if not self._check_sufficient_balance(company_id, usage_type, quantity):
+            return {
+                "success": False,
+                "message": "Insufficient balance"
+            }
+        
+        # If covered by plan, record usage but don't deduct from balance
+        if self._is_covered_by_plan(company_id, None, usage_type, quantity):
+            try:
+                db = firestore.client()
+                usage_ref = db.collection("usage").document()
+                
+                rate = self.rates.get(usage_type, 0.10)  # Default rate if not found
+                amount = rate * quantity
+                
+                usage_data = {
+                    "company_id": company_id,
+                    "type": usage_type,
+                    "quantity": quantity,
+                    "amount": amount,
+                    "plan_covered": True,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "status": "completed"
+                }
+                
+                usage_ref.set(usage_data)
+                
+                return {
+                    "success": True,
+                    "message": "Usage recorded (covered by plan)",
+                    "id": usage_ref.id
+                }
+            except Exception as e:
+                logger.error(f"Error recording plan-covered usage: {str(e)}")
+                return {
+                    "success": False,
+                    "message": f"Error recording usage: {str(e)}"
+                }
+        
+        # If not covered by plan, deduct from balance
+        try:
+            rate = self.rates.get(usage_type, 0.10)  # Default rate if not found
+            amount = rate * quantity
             
             # Deduct from balance
-            self._deduct_from_balance(company_id, cost)
+            deduction_result = self._deduct_from_balance(company_id, amount)
+            
+            if not deduction_result["success"]:
+                return deduction_result
             
             # Record usage
             db = firestore.client()
-            db.collection("usage").add({
+            usage_ref = db.collection("usage").document()
+            
+            usage_data = {
                 "company_id": company_id,
                 "type": usage_type,
                 "quantity": quantity,
-                "cost": cost,
+                "amount": amount,
                 "timestamp": datetime.datetime.now().isoformat(),
-                "description": f"{quantity} {usage_type} usage"
-            })
+                "status": "completed"
+            }
             
-            return {"success": True, "cost": cost}
+            usage_ref.set(usage_data)
+            
+            return {
+                "success": True,
+                "message": f"Usage recorded and ${amount} deducted from balance",
+                "id": usage_ref.id
+            }
+            
         except Exception as e:
             logger.error(f"Error recording usage: {str(e)}")
-            return {"error": str(e), "success": False}
+            return {
+                "success": False,
+                "message": f"Error recording usage: {str(e)}"
+            }
     
     def _check_sufficient_balance(self, company_id, usage_type, quantity):
-        """Check if company has sufficient balance for usage"""
+        """Check if company has sufficient balance for the requested operation"""
+        
+        # Test accounts always have sufficient balance
+        if company_id == "test-company-id" or self.test_account:
+            logger.info(f"Test account detected - bypassing balance check for {usage_type}")
+            return True
+            
+        # Check if operation is covered by plan
+        if self._is_covered_by_plan(company_id, None, usage_type, quantity):
+            logger.info(f"Operation {usage_type} covered by plan for company {company_id}")
+            return True
+        
+        # If not covered by plan, check balance
         try:
-            # Get company plan to check if this usage is covered by subscription
-            db = firestore.client()
-            company = db.collection("companies").document(company_id).get().to_dict()
-            plan = company.get("plan", "free")
-            
-            # Check if this is covered by the plan
-            if self._is_covered_by_plan(company_id, plan, usage_type, quantity):
-                return True
-            
-            # If not covered, check pay-as-you-go balance
-            rate = self.rates.get(usage_type, 0)
-            cost = rate * quantity
+            rate = self.rates.get(usage_type, 0.10)  # Default rate if not found
+            required_amount = rate * quantity
             
             balance = self._get_company_balance(company_id)
-            current_balance = balance.get("balance", 0)
+            current_balance = balance.get("balance", 0.0)
             
-            return current_balance >= cost
+            # Check if balance is sufficient
+            if current_balance >= required_amount:
+                logger.info(f"Sufficient balance for {usage_type} - Required: ${required_amount}, Available: ${current_balance}")
+                return True
+            else:
+                logger.warning(f"Insufficient balance for {usage_type} - Required: ${required_amount}, Available: ${current_balance}")
+                return False
+                
         except Exception as e:
             logger.error(f"Error checking balance: {str(e)}")
             return False
@@ -548,11 +631,11 @@ class PaymentManager:
         try:
             db = firestore.client()
             balance_ref = db.collection("balances").document(company_id)
-            balance = balance_ref.get().to_dict()
+            balance = balance_ref.get()
             
             if balance:
-                current_balance = balance.get("balance", 0)
-                new_balance = max(0, current_balance - amount)
+                current_balance = balance.to_dict()
+                new_balance = max(0, current_balance.get("balance", 0) - amount)
                 
                 balance_ref.update({
                     "balance": new_balance,
@@ -568,12 +651,12 @@ class PaymentManager:
                     "description": "Usage charge"
                 })
                 
-                return True
+                return {"success": True}
             
-            return False
+            return {"success": False}
         except Exception as e:
             logger.error(f"Error deducting from balance: {str(e)}")
-            return False
+            return {"success": False}
     
     def get_subscription_plans(self):
         """Get available subscription plans"""

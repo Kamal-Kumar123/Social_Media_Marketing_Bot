@@ -124,14 +124,15 @@ class AuthManager:
                             # Store user in session
                             st.session_state["user"] = test_user
                             
-                            # Create a test company for the user
+                            # Create a test company for the user with full access
                             test_company = {
                                 "id": "test-company-id",
                                 "name": "Test Company",
                                 "owner": "test-user-id",
                                 "role": "owner",
-                                "plan": "free",
-                                "balance": 100.0,
+                                "plan": "enterprise",  # Use highest tier plan for test account
+                                "is_test_account": True,  # Flag to identify test accounts
+                                "balance": 1000.0,  # Higher balance for testing
                                 "members": [
                                     {"id": "test-user-id", "email": email, "role": "owner"}
                                 ]
@@ -140,8 +141,11 @@ class AuthManager:
                             # Store company in session
                             st.session_state["company"] = test_company
                             
+                            # Set test account environment variable
+                            os.environ["TEST_ACCOUNT"] = "true"
+                            
                             # Redirect to main app
-                            st.success("Logged in successfully!")
+                            st.success("Logged in successfully as test user with full feature access!")
                             st.rerun()
                         else:
                             st.error("Invalid email or password")

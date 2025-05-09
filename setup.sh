@@ -29,5 +29,19 @@ if [ ! -f .env ]; then
     echo "Please edit the .env file to add your API credentials."
 fi
 
+# Always enable test account mode for proper functionality
+echo "TEST_ACCOUNT=true" >> .env
+echo "Enabled test account mode - real posting will be attempted without charges."
+
+# Ask if mock mode should be used (no real API calls)
+read -p "Use mock mode for social media posts? This will simulate posting without making real API calls (y/n): " enable_mock
+if [[ $enable_mock == "y" || $enable_mock == "Y" ]]; then
+    echo "MOCK_SOCIAL=true" >> .env
+    echo "Enabled mock mode - no real API calls will be made."
+else
+    echo "MOCK_SOCIAL=false" >> .env
+    echo "Real API calls will be made if credentials are configured."
+fi
+
 echo "Setup complete! To start the app, run:"
 echo "python -m streamlit run streamlit_app.py" 

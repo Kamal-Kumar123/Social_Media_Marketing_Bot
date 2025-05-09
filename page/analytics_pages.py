@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import altair as alt
+import os
 
 def analytics_page(data_access, auth_manager, payment_manager):
     """Display analytics and reporting page"""
@@ -30,7 +31,13 @@ def analytics_page(data_access, auth_manager, payment_manager):
         # Check if analytics is allowed or requires payment
         has_analytics = False
         
-        if plan_details.get("analytics", False) == True:
+        # Always grant access to test accounts
+        is_test_account = company.get("is_test_account", False) or os.getenv("TEST_ACCOUNT", "false").lower() == "true"
+        
+        if is_test_account:
+            # Test accounts always have access to analytics
+            has_analytics = True
+        elif plan_details.get("analytics", False) == True:
             # Analytics included in plan
             has_analytics = True
         

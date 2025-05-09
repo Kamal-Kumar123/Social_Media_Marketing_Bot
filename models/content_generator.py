@@ -60,7 +60,11 @@ class ContentGenerator:
             Include a compelling call-to-action.
             """
             
-            response = openai.ChatCompletion.create(
+            # Initialize the client with the new OpenAI SDK format (v1.x)
+            from openai import OpenAI
+            client = OpenAI(api_key=self.config.openai_api_key)
+            
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert marketing copywriter specializing in social media ads."},
@@ -70,6 +74,7 @@ class ContentGenerator:
                 temperature=0.7
             )
             
+            # Updated format for new API response
             ad_copy = response.choices[0].message.content.strip()
             logger.info(f"Generated ad copy for {product['name']} on {platform}")
             
@@ -77,12 +82,18 @@ class ContentGenerator:
             
         except Exception as e:
             logger.error(f"Error generating ad copy: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return f"Check out our amazing {product['name']}! {' '.join(product['features'][:2])}. Learn more now!"
     
     def generate_image_prompt(self, product: Dict, platform: str, style: str) -> str:
         """Generate a prompt for image creation based on product details"""
         try:
-            response = openai.ChatCompletion.create(
+            # Initialize the client with the new OpenAI SDK format (v1.x)
+            from openai import OpenAI
+            client = OpenAI(api_key=self.config.openai_api_key)
+            
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert in creating detailed image generation prompts for marketing."},
@@ -102,6 +113,7 @@ class ContentGenerator:
                 temperature=0.7
             )
             
+            # Updated format for new API response
             image_prompt = response.choices[0].message.content.strip()
             logger.info(f"Generated image prompt for {product['name']}")
             
@@ -109,23 +121,42 @@ class ContentGenerator:
             
         except Exception as e:
             logger.error(f"Error generating image prompt: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return f"Professional photo of {product['name']} in {style} style, appealing to {product['target_audience']}"
     
     def generate_image(self, prompt: str, size: str = "1024x1024") -> bytes:
         """Generate an image using DALL-E based on the prompt"""
         try:
-            response = openai.Image.create(
+            # Log API key check (don't log the full key for security)
+            api_key = self.config.openai_api_key
+            if not api_key:
+                logger.error("OpenAI API key is missing")
+                return None
+            
+            logger.info(f"Attempting to generate image with prompt: {prompt[:30]}...")
+            
+            # Initialize the client with the new OpenAI SDK format (v1.x)
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            
+            # Generate image using the new API format
+            response = client.images.generate(
+                model="dall-e-3",  # Use DALL-E 3 for better quality
                 prompt=prompt,
                 n=1,
                 size=size
             )
             
+            # Extract image URL from the response
+            image_url = response.data[0].url
+            logger.info(f"Image generated successfully, URL: {image_url[:30]}...")
+            
             # Download the image
-            image_url = response['data'][0]['url']
             image_response = requests.get(image_url)
             
             if image_response.status_code == 200:
-                logger.info("Successfully generated image")
+                logger.info("Successfully downloaded generated image")
                 return image_response.content
             else:
                 logger.error(f"Failed to download generated image: {image_response.status_code}")
@@ -133,6 +164,11 @@ class ContentGenerator:
                 
         except Exception as e:
             logger.error(f"Error generating image: {str(e)}")
+            # Print the full error details to help with debugging
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Detailed error: {error_details}")
+            
             return None
     
     def create_ad_content(self, product: Dict, platform: str, format_type: str = "image") -> Dict:
@@ -176,7 +212,11 @@ class ContentGenerator:
     def generate_hashtags(self, product: Dict, platform: str) -> List[str]:
         """Generate relevant hashtags for the product and platform"""
         try:
-            response = openai.ChatCompletion.create(
+            # Initialize the client with the new OpenAI SDK format (v1.x)
+            from openai import OpenAI
+            client = OpenAI(api_key=self.config.openai_api_key)
+            
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a social media marketing expert specializing in hashtag optimization."},
@@ -195,6 +235,7 @@ class ContentGenerator:
                 temperature=0.7
             )
             
+            # Updated format for new API response
             hashtags = [tag.strip() for tag in response.choices[0].message.content.split(',')]
             hashtags = [tag if tag.startswith('#') else f"#{tag}" for tag in hashtags]
             
@@ -202,4 +243,6 @@ class ContentGenerator:
             
         except Exception as e:
             logger.error(f"Error generating hashtags: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return [f"#{product['name'].replace(' ', '')}", "#newproduct", "#musthave"] 

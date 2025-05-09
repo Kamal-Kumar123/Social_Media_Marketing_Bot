@@ -5,7 +5,11 @@ Handles loading and storing all API credentials and settings.
 
 import os
 import json
+import logging
 from dotenv import load_dotenv
+
+# Configure logging
+logger = logging.getLogger("Config")
 
 # Load environment variables
 load_dotenv()
@@ -15,6 +19,9 @@ class Config:
     
     def __init__(self):
         """Initialize configuration from environment variables"""
+        # Log that we're initializing
+        logger.info("Initializing configuration from environment variables")
+        
         # API credentials
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         
@@ -47,8 +54,26 @@ class Config:
         self.campaign_data_path = os.getenv("CAMPAIGN_DATA_PATH", "data/campaigns.json")
         self.product_data_path = os.getenv("PRODUCT_DATA_PATH", "data/products.json")
         self.analytics_data_path = os.getenv("ANALYTICS_DATA_PATH", "data/analytics")
+
+        #changeable
         self.post_frequency = int(os.getenv("POST_FREQUENCY", "8"))  # posts per day
+
+        #changeable
         self.platforms = json.loads(os.getenv("PLATFORMS", '["facebook", "twitter", "instagram", "linkedin"]'))
+        
+        #changeable
+        # Log API credential status (safely, without exposing actual values)
+        logger.info(f"OpenAI API Key: {'Set' if self.openai_api_key else 'Not Set'}")
+        logger.info(f"Twitter API Key: {'Set' if self.twitter_api_key else 'Not Set'}")
+        logger.info(f"Twitter API Secret: {'Set' if self.twitter_api_secret else 'Not Set'}")
+        logger.info(f"Twitter Access Token: {'Set' if self.twitter_access_token else 'Not Set'}")
+        logger.info(f"Twitter Access Token Secret: {'Set' if self.twitter_access_token_secret else 'Not Set'}")
+        logger.info(f"Facebook Access Token: {'Set' if self.facebook_access_token else 'Not Set'}")
+        logger.info(f"Facebook App ID: {'Set' if self.facebook_app_id else 'Not Set'}")
+        logger.info(f"Facebook App Secret: {'Set' if self.facebook_app_secret else 'Not Set'}")
+        logger.info(f"Facebook Page ID: {'Set' if self.facebook_page_id else 'Not Set'}")
+        logger.info(f"Instagram Username: {'Set' if self.instagram_username else 'Not Set'}")
+        logger.info(f"Instagram Password: {'Set' if self.instagram_password else 'Not Set'}")
     
     def update_config(self, config_dict):
         """Update configuration with values from a dictionary"""
@@ -57,6 +82,7 @@ class Config:
             self.openai_api_key = config_dict["openai_api_key"]
             os.environ["OPENAI_API_KEY"] = config_dict["openai_api_key"]
         
+        #changeable
         # Update social media credentials
         for platform in ["facebook", "twitter", "instagram", "linkedin", "tiktok", "pinterest", "snapchat"]:
             for key in config_dict:
