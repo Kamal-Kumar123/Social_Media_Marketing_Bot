@@ -3,6 +3,8 @@
 
 # Virtual environment
 env/
+AdBot/
+
 venv/
 ENV/
 
