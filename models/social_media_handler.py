@@ -12,7 +12,7 @@ from linkedin_v2 import linkedin as linkedin
 import instagrapi  # Instagram API
 from TikTokApi import TikTokApi as tiktok  # TikTok API
 from py3pin.Pinterest import Pinterest as pinterestapi  # Pinterest API
-#from snapchat-dl as snapchat  # Snapchat API
+# from snapchat-dl as snapchat  # Snapchat API
 from typing import Dict, List, Any, Optional, Union
 
 # Configure logging

@@ -1068,13 +1068,16 @@ def display_page(app, page):
                     app["payment_manager"], 
                     app["auth_manager"]
                 )
+
             elif page == "Team":
                 team_management_page(
                     app["auth_manager"], 
                     app["data_access"]
                 )
+
             elif page == "Platform Setup":
                 platform_setup_page(app)
+                
             else:
                 st.error(f"Invalid page: {page}")
                 logger.error(f"Invalid page: {page}")

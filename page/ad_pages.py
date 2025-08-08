@@ -341,8 +341,8 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                                     # Record post in database
                                     post_id = data_access.record_post(
                                         {
-                                            "platform": platform,
-                                            "product_id": product_id,
+                                "platform": platform,
+                                "product_id": product_id,
                                             "format_type": format_type,
                                             "company_id": company["id"],
                                             "user_id": user["id"],
@@ -364,7 +364,7 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                                         company["id"], 
                                         user["id"]
                                     )
-                                else:
+                            else:
                                     st.error(f"Failed to post to {platform}: {post_result.get('error', 'Unknown error')}")
                 
                 except Exception as e:
@@ -437,99 +437,99 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                                 st.error(f"Failed to post to {platform}: {post_result.get('error', 'Unknown error')}")
                 else:
                     # Original behavior - generate new content and post
-                    # Get the selected platform from checkboxes
+                # Get the selected platform from checkboxes
                     selected_platform_list = [p for p, is_selected in Selected_Platforms.items() if is_selected]
+                
+                if not selected_platform_list:
+                    st.error("Please select at least one platform to post to")
+                    return
+                
+                    # Use the first selected platform (or we could loop through all selected)
+                platform = selected_platform_list[0]
+                
+                with st.spinner(f"Creating and posting ad to {', '.join(selected_platform_list)}..."):
+                    # Get product data
+                    product = products[product_id]
                     
-                    if not selected_platform_list:
-                        st.error("Please select at least one platform to post to")
+                    # Record usage for post and content generation
+                    image_usage_result = payment_manager.record_usage(company["id"], "image_generation")
+                    content_usage_result = payment_manager.record_usage(company["id"], "content_generation")
+                    post_usage_result = payment_manager.record_usage(company["id"], "post")
+                    
+                    if (("error" in image_usage_result and not image_usage_result.get("success", False)) or
+                        ("error" in content_usage_result and not content_usage_result.get("success", False)) or
+                        ("error" in post_usage_result and not post_usage_result.get("success", False))):
+                        st.error("Cannot post: Insufficient credits")
+                        st.info("Please add credits to your account to continue using the service.")
                         return
                     
-                    # Use the first selected platform (or we could loop through all selected)
-                    platform = selected_platform_list[0]
+                    # Create ad content
+                    ad_content = {
+                        "platform": platform,
+                        "product_id": product_id,
+                        "format_type": format_type
+                    }
                     
-                    with st.spinner(f"Creating and posting ad to {', '.join(selected_platform_list)}..."):
-                        # Get product data
-                        product = products[product_id]
+                    # Generate ad copy using ContentGenerator
+                    ad_copy = content_generator.generate_ad_copy(product, platform, tone, length)
+                    
+                    if ad_copy:
+                        # Add copy to ad_content
+                        ad_content["copy"] = ad_copy
+                    else:
+                        st.warning("Failed to generate ad copy. Using default text.")
+                        ad_content["copy"] = f"Check out our amazing {product['name']}! {' '.join(product['features'][:2])}. Learn more now!"
+                    
+                    # Generate image using OpenAI via ContentGenerator
+                    with st.spinner("Generating image with AI..."):
+                        # Create a style based on platform
+                        style = "clean, professional" if platform == "linkedin" else "vibrant, eye-catching"
                         
-                        # Record usage for post and content generation
-                        image_usage_result = payment_manager.record_usage(company["id"], "image_generation")
-                        content_usage_result = payment_manager.record_usage(company["id"], "content_generation")
-                        post_usage_result = payment_manager.record_usage(company["id"], "post")
+                        # Generate image prompt based on product and ad copy
+                        image_prompt = content_generator.generate_image_prompt(product, platform, style)
+                        st.info(f"Generated image prompt: {image_prompt}")
                         
-                        if (("error" in image_usage_result and not image_usage_result.get("success", False)) or
-                            ("error" in content_usage_result and not content_usage_result.get("success", False)) or
-                            ("error" in post_usage_result and not post_usage_result.get("success", False))):
-                            st.error("Cannot post: Insufficient credits")
-                            st.info("Please add credits to your account to continue using the service.")
-                            return
+                        # Generate the actual image
+                        image_bytes = content_generator.generate_image(image_prompt)
                         
-                        # Create ad content
-                        ad_content = {
-                            "platform": platform,
-                            "product_id": product_id,
-                            "format_type": format_type
-                        }
-                        
-                        # Generate ad copy using ContentGenerator
-                        ad_copy = content_generator.generate_ad_copy(product, platform, tone, length)
-                        
-                        if ad_copy:
-                            # Add copy to ad_content
-                            ad_content["copy"] = ad_copy
+                        if image_bytes:
+                            # Save image to file
+                            import os
+                            from PIL import Image
+                            import io
+                            
+                            # Create directory if it doesn't exist
+                            os.makedirs("data/images", exist_ok=True)
+                            
+                            # Generate a unique filename
+                            image_filename = f"data/images/{company['id']}_{product_id}_{int(time.time())}.png"
+                            
+                            # Save the image
+                            with open(image_filename, "wb") as img_file:
+                                img_file.write(image_bytes)
+                            
+                            # Add image path to ad_content
+                            ad_content["image_path"] = image_filename
                         else:
-                            st.warning("Failed to generate ad copy. Using default text.")
-                            ad_content["copy"] = f"Check out our amazing {product['name']}! {' '.join(product['features'][:2])}. Learn more now!"
-                        
-                        # Generate image using OpenAI via ContentGenerator
-                        with st.spinner("Generating image with AI..."):
-                            # Create a style based on platform
-                            style = "clean, professional" if platform == "linkedin" else "vibrant, eye-catching"
+                            # Check logs for error details
+                            st.error("Failed to generate image. There may be an issue with the OpenAI API connection.")
+                            st.warning("Please check that your OpenAI API key is correct in your .env file.")
                             
-                            # Generate image prompt based on product and ad copy
-                            image_prompt = content_generator.generate_image_prompt(product, platform, style)
-                            st.info(f"Generated image prompt: {image_prompt}")
+                            # Add a button to display debug information
+                            if st.button("Show Debug Info (Post Now)"):
+                                st.code(f"API Key Status: {'Set' if content_generator.config.openai_api_key else 'Not Set'}")
+                                st.code(f"Image Prompt: {image_prompt}")
+                                # Display last few lines from the log file if available
+                                try:
+                                    with open("adbot.log", "r") as log_file:
+                                        log_lines = log_file.readlines()
+                                        last_logs = log_lines[-20:]  # Get last 20 lines
+                                        st.code("".join(last_logs), language="text")
+                                except Exception as e:
+                                    st.error(f"Could not read log file: {str(e)}")
                             
-                            # Generate the actual image
-                            image_bytes = content_generator.generate_image(image_prompt)
-                            
-                            if image_bytes:
-                                # Save image to file
-                                import os
-                                from PIL import Image
-                                import io
-                                
-                                # Create directory if it doesn't exist
-                                os.makedirs("data/images", exist_ok=True)
-                                
-                                # Generate a unique filename
-                                image_filename = f"data/images/{company['id']}_{product_id}_{int(time.time())}.png"
-                                
-                                # Save the image
-                                with open(image_filename, "wb") as img_file:
-                                    img_file.write(image_bytes)
-                                
-                                # Add image path to ad_content
-                                ad_content["image_path"] = image_filename
-                            else:
-                                # Check logs for error details
-                                st.error("Failed to generate image. There may be an issue with the OpenAI API connection.")
-                                st.warning("Please check that your OpenAI API key is correct in your .env file.")
-                                
-                                # Add a button to display debug information
-                                if st.button("Show Debug Info (Post Now)"):
-                                    st.code(f"API Key Status: {'Set' if content_generator.config.openai_api_key else 'Not Set'}")
-                                    st.code(f"Image Prompt: {image_prompt}")
-                                    # Display last few lines from the log file if available
-                                    try:
-                                        with open("adbot.log", "r") as log_file:
-                                            log_lines = log_file.readlines()
-                                            last_logs = log_lines[-20:]  # Get last 20 lines
-                                            st.code("".join(last_logs), language="text")
-                                    except Exception as e:
-                                        st.error(f"Could not read log file: {str(e)}")
-                                
-                                st.warning("Please try again or contact support.")
-                                return
+                            st.warning("Please try again or contact support.")
+                            return
                         
                         # Store the generated content for future use
                         st.session_state["current_ad_content"] = ad_content
@@ -540,38 +540,38 @@ def create_ad_page(data_access, auth_manager, content_generator, social_handler,
                             platform_ad_content = ad_content.copy()
                             platform_ad_content["platform"] = platform
                             platform_ad_content["company_id"] = company["id"]
-                            
-                            # Post to platform
+                    
+                    # Post to platform
                             post_result = social_handler.post_ad(platform_ad_content)
-                            
-                            if post_result["success"]:
-                                # Record post in database
-                                post_id = data_access.record_post(
-                                    {
-                                        "platform": platform,
-                                        "product_id": product_id,
-                                        "format_type": format_type,
-                                        "company_id": company["id"],
-                                        "user_id": user["id"],
-                                        "content": {
+                    
+                    if post_result["success"]:
+                        # Record post in database
+                        post_id = data_access.record_post(
+                            {
+                                "platform": platform,
+                                "product_id": product_id,
+                                "format_type": format_type,
+                                "company_id": company["id"],
+                                "user_id": user["id"],
+                                "content": {
                                             "copy": platform_ad_content["copy"],
                                             "hashtags": platform_ad_content.get("hashtags", []),
                                             "image_path": platform_ad_content.get("image_path", "")
-                                        }
-                                    },
-                                    company["id"]
-                                )
-                                
-                                st.success(f"Posted successfully to {platform}! Post ID: {post_result['post_id']}")
-                                
-                                # Log event
-                                data_access.log_event(
-                                    "post_created", 
-                                    {"post_id": post_id, "platform": platform, "product_id": product_id}, 
-                                    company["id"], 
-                                    user["id"]
-                                )
-                            else:
+                                }
+                            },
+                            company["id"]
+                        )
+                        
+                        st.success(f"Posted successfully to {platform}! Post ID: {post_result['post_id']}")
+                        
+                        # Log event
+                        data_access.log_event(
+                            "post_created", 
+                            {"post_id": post_id, "platform": platform, "product_id": product_id}, 
+                            company["id"], 
+                            user["id"]
+                        )
+                    else:
                                 st.error(f"Failed to post to {platform}: {post_result.get('error', 'Unknown error')}")
                 
             except Exception as e:
