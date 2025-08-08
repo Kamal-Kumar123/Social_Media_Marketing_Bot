@@ -8,9 +8,6 @@ AdBot/
 venv/
 ENV/
 
-# Firebase credentials
-firebase-credentials.json
-
 # Compiled Python files
 __pycache__/
 *.py[cod]
